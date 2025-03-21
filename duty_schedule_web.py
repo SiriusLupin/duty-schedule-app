@@ -147,6 +147,10 @@ if file and code:
         # 將 DataFrame 轉為 CSV
         csv = df_output.to_csv(index=False, encoding='utf-8')
 
+        st.success("轉換完成，請點擊下方按鈕下載 CSV 檔")
+        st.dataframe(df_output, use_container_width=True)
+        
+        st.caption("⚠ csv檔案直接開啟內容可能為亂碼，但不影響匯入，請先確認上方資料無誤後再點選下方按鈕下載。")
         st.download_button(
             label=f"📥 下載 {year_month}個人班表({code}).csv",
             data=csv,
