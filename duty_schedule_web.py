@@ -144,14 +144,8 @@ if file and code:
         df_output = df_output[["Subject", "Start Date", "Start Time", "End Date", "End Time"]]
 
 
-        # 加入編碼選擇（預設為 big5）
-        # encoding_option = st.selectbox("📎 請選擇下載 CSV 編碼格式（避免亂碼）",
-        # options=["big5", "utf-8-sig"],
-        # index=0  # 預設為 big5
-        # )
-
-        # 將 DataFrame 轉為 CSV，根據選擇的編碼
-        csv = df_output.to_csv(index=False, encoding='utf-8-sig')
+        # 將 DataFrame 轉為 CSV
+        csv = df_output.to_csv(index=False, encoding='utf-8')
 
         st.download_button(
             label=f"📥 下載 {year_month}個人班表({code}).csv",
