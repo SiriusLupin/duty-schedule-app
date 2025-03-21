@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import re
-import base64
 from io import BytesIO
 
 # ---------- 時間解析規則 ---------- #
@@ -95,11 +94,8 @@ def apply_time_rules(df):
 st.set_page_config(page_title="班表轉換工具", layout="centered")
 st.title("📆 班表轉換工具（Google 日曆格式）")
 
-with st.expander("📘 操作說明 (點此展開)", expanded=False):
-    with open("班表轉換成google日曆檔操作說明.pdf", "rb") as f:
-        base64_pdf = base64.b64encode(f.read()).decode("utf-8")
-    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
-    st.markdown(pdf_display, unsafe_allow_html=True)
+with open("班表轉換成google日曆檔操作說明.pdf", "rb") as f:
+    st.download_button("📘 下載操作說明 PDF", data=f.read(), file_name="班表轉換操作說明.pdf")
 
 code = st.text_input("請輸入班表代號：")
 file = st.file_uploader("請上傳班表 Excel 檔（.xlsx）")
