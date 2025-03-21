@@ -1,11 +1,10 @@
+import streamlit as st
 import pandas as pd
-import tkinter as tk
-from tkinter import filedialog, messagebox
 import re
-import os
+import base64
+from io import BytesIO
 
 # ---------- 時間解析規則 ---------- #
-# 對照表：處方判讀、藥物諮詢、化療處方判讀、PreESRD 時間區段
 def apply_time_rules(df):
     prescription_time_map = {
         "上午": ("08:00", "12:00"),
@@ -15,8 +14,6 @@ def apply_time_rules(df):
     }
 
     extra_rows = []
-
-    # 移除 "附　註"（全形空格）開頭或完全為空的列
     df = df[~df["工作內容"].str.strip().isin(["", "nan", "附　註"])]
 
     for idx, row in df.iterrows():
@@ -30,20 +27,20 @@ def apply_time_rules(df):
             elif weekday in ["六", "日"]:
                 df.at[idx, "Start Time"] = "11:00"
                 df.at[idx, "End Time"] = "15:00"
-         # 門診藥局調劑 - 擷取括號中的時間格式
+
         elif "門診藥局調劑" in content:
             match = re.search(r"\((\d{1,2}:\d{2})-(\d{1,2}:\d{2})\)", content)
             if match:
                 df.at[idx, "Start Time"] = match.group(1)
                 df.at[idx, "End Time"] = match.group(2)
-        # 當上下午時間段相同於處方判讀 / 化療處方判讀 / 藥物諮詢 / PreESRD（依關鍵字）者，可直接加入此欄位，詳細時間段則見上面時間對照表
-        elif any(keyword in content for keyword in ["處方判讀", "化療處方判讀", "藥物諮詢", "PreESRD"]):
+
+        elif any(k in content for k in ["處方判讀", "化療處方判讀", "藥物諮詢", "PreESRD"]):
             for key, (start, end) in prescription_time_map.items():
                 if key in content:
                     df.at[idx, "Start Time"] = start
                     df.at[idx, "End Time"] = end
                     break
-        # 抗凝藥師門診 - 星期二與三不同時段
+
         elif "抗凝藥師門診" in content:
             if weekday == "二":
                 df.at[idx, "Start Time"] = "08:30"
@@ -51,26 +48,15 @@ def apply_time_rules(df):
             elif weekday == "三":
                 df.at[idx, "Start Time"] = "13:30"
                 df.at[idx, "End Time"] = "17:00"
-        # 移植藥師門診 - 上午固定，下午預留
-        elif "移植藥師門診" in content:
-            if "上午" in content:
-                df.at[idx, "Start Time"] = "08:30"
-                df.at[idx, "End Time"] = "12:00"
-            # 預留未來有下午時段使用
-            # elif "下午" in content:
-            #     df.at[idx, "Start Time"] = "13:30"
-            #     df.at[idx, "End Time"] = "17:00"
 
-        elif "PreESRD" in content:
-            if "上午" in content:
-                df.at[idx, "Start Time"] = "08:30"
-                df.at[idx, "End Time"] = "12:00"
-            # 預留未來有下午時段使用
-            # elif "下午" in content:
-            #     df.at[idx, "Start Time"] = "13:30"
-            #     df.at[idx, "End Time"] = "17:00"
+        elif "移植藥師門診" in content and "上午" in content:
+            df.at[idx, "Start Time"] = "08:30"
+            df.at[idx, "End Time"] = "12:00"
 
-        # 中藥局調劑 - 不限定星期三早上
+        elif "PreESRD" in content and "上午" in content:
+            df.at[idx, "Start Time"] = "08:30"
+            df.at[idx, "End Time"] = "12:00"
+
         elif "中藥局調劑" in content:
             df.at[idx, "Start Time"] = "08:30"
             df.at[idx, "End Time"] = "12:00"
@@ -79,7 +65,6 @@ def apply_time_rules(df):
             df.at[idx, "Start Time"] = "08:00"
             df.at[idx, "End Time"] = "20:00"
 
-        # 非常班之諮詢與藥動服務-1：平日由處方判讀 7-住院自動新增非常班
         if "處方判讀 7-住院" in content and weekday in ["一", "二", "三", "四", "五"]:
             extra_rows.append({
                 "日期": row["日期"],
@@ -90,7 +75,6 @@ def apply_time_rules(df):
                 "End Time": "21:30"
             })
 
-        # 非常班之諮詢與藥動服務-2：假日已列出的非常班班別時間解析
         if "非常班之諮詢與藥動服務" in content and weekday in ["六", "日"]:
             if "上午" in content:
                 df.at[idx, "Start Time"] = "08:00"
@@ -107,89 +91,69 @@ def apply_time_rules(df):
 
     return df
 
-# ---------- GUI 主程式 ---------- #
-def run_gui():
-    def select_file():
-        path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
-        if path:
-            file_path.set(path)
+# ---------- Streamlit App ---------- #
+st.set_page_config(page_title="班表轉換工具", layout="centered")
+st.title("📆 班表轉換工具（Google 日曆格式）")
 
-    def execute():
-        name = code_entry.get().strip()
-        file = file_path.get()
-        if not name or not file:
-            messagebox.showerror("錯誤", "請輸入班表代號並選擇檔案")
-            return
+with st.expander("📘 操作說明 (點此展開)", expanded=False):
+    with open("班表轉換成google日曆檔操作說明.pdf", "rb") as f:
+        base64_pdf = base64.b64encode(f.read()).decode("utf-8")
+    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
+    st.markdown(pdf_display, unsafe_allow_html=True)
 
-        try:
-            df = pd.read_excel(file, header=None)
-            title = str(df.iat[0, 0])
-            match = re.search(r"(\d{2,3})年(\d{1,2})月", title)
-            if not match:
-                raise ValueError("無法從標題擷取年月")
-            roc_year = int(match.group(1))
-            month = int(match.group(2))
-            year = roc_year + 1911
-            year_month = f"{year}{month:02d}"
+code = st.text_input("請輸入班表代號：")
+file = st.file_uploader("請上傳班表 Excel 檔（.xlsx）")
 
-            dates = df.iloc[1, 1:].tolist()
-            weekdays = df.iloc[2, 1:].tolist()
-            date_mapping = [
-                {"日期": f"{year}-{month:02d}-{int(day):02d}", "星期": weekdays[i]}
-                for i, day in enumerate(dates) if str(day).strip().isdigit()
-            ]
+if file and code:
+    df = pd.read_excel(file, header=None)
+    title = str(df.iat[0, 0])
+    match = re.search(r"(\d{2,3})年(\d{1,2})月", title)
+    if match:
+        roc_year = int(match.group(1))
+        month = int(match.group(2))
+        year = roc_year + 1911
+        year_month = f"{year}{month:02d}"
 
-            results = []
-            for row_idx in range(3, df.shape[0]):
-                content = str(df.iat[row_idx, 0]).strip()
-                if not content or content.lower() == "nan" or "附　註" in content:
-                    continue
-                for col_idx in range(1, len(date_mapping) + 1):
-                    cell = str(df.iat[row_idx, col_idx])
-                    if name in cell:
-                        simplified = re.sub(r"\(\d{1,2}:\d{2}-\d{1,2}:\d{2}\)", "", content)
-                        simplified = simplified.replace("調劑複核", "C")
-                        results.append({
-                            "日期": date_mapping[col_idx - 1]["日期"],
-                            "星期": date_mapping[col_idx - 1]["星期"],
-                            "工作內容": content,
-                            "簡化後內容": simplified,
-                        })
+        dates = df.iloc[1, 1:].tolist()
+        weekdays = df.iloc[2, 1:].tolist()
+        date_mapping = [
+            {"日期": f"{year}-{month:02d}-{int(day):02d}", "星期": weekdays[i]}
+            for i, day in enumerate(dates) if str(day).strip().isdigit()
+        ]
 
-            df_result = pd.DataFrame(results)
-            df_result["Start Time"] = ""
-            df_result["End Time"] = ""
-            df_result = apply_time_rules(df_result)
+        results = []
+        for row_idx in range(3, df.shape[0]):
+            content = str(df.iat[row_idx, 0]).strip()
+            if not content or content.lower() == "nan" or "附　註" in content:
+                continue
+            for col_idx in range(1, len(date_mapping) + 1):
+                cell = str(df.iat[row_idx, col_idx])
+                if code in cell:
+                    simplified = re.sub(r"\(\d{1,2}:\d{2}-\d{1,2}:\d{2}\)", "", content)
+                    simplified = simplified.replace("調劑複核", "C")
+                    results.append({
+                        "日期": date_mapping[col_idx - 1]["日期"],
+                        "星期": date_mapping[col_idx - 1]["星期"],
+                        "工作內容": content,
+                        "簡化後內容": simplified,
+                    })
 
-            df_output = df_result.rename(columns={"簡化後內容": "Subject", "日期": "Start Date"})
-            df_output["End Date"] = df_output["Start Date"]
-            df_output = df_output[["Subject", "Start Date", "Start Time", "End Date", "End Time"]]
+        df_result = pd.DataFrame(results)
+        df_result["Start Time"] = ""
+        df_result["End Time"] = ""
+        df_result = apply_time_rules(df_result)
 
-            default_filename = f"{year_month}個人班表({name}).csv"
-            path = filedialog.asksaveasfilename(defaultextension=".csv", initialfile=default_filename, filetypes=[("CSV files", "*.csv")])
-            if not path:
-                return
+        df_output = df_result.rename(columns={"簡化後內容": "Subject", "日期": "Start Date"})
+        df_output["End Date"] = df_output["Start Date"]
+        df_output = df_output[["Subject", "Start Date", "Start Time", "End Date", "End Time"]]
 
-            df_output.to_csv(path, index=False, encoding="utf-8-sig")
-            messagebox.showinfo("成功", f"CSV 已匯出：{path}")
-        except Exception as e:
-            messagebox.showerror("錯誤", str(e))
-
-    root = tk.Tk()
-    root.title("班表轉換工具")
-    root.geometry("350x300")
-    file_path = tk.StringVar()
-
-    tk.Label(root, text="班表代號：",font=("微軟正黑體", 12)).pack(pady=5)
-    code_entry = tk.Entry(root,font=("微軟正黑體", 12), width=10)
-    code_entry.pack(pady=5)
-
-    tk.Button(root, text="選擇班表檔案", command=select_file, font=("微軟正黑體", 12)).pack(pady=10)
-    tk.Label(root, textvariable=file_path, font=("微軟正黑體", 12), wraplength=300, justify="left", fg="blue").pack(pady=2)
-
-    tk.Button(root, text="執行轉換並儲存CSV", command=execute).pack(pady=10)
-    tk.Button(root, text="關閉", command=root.destroy).pack(pady=10)
-    root.mainloop()
-
-if __name__ == '__main__':
-    run_gui()
+        csv = df_output.to_csv(index=False, encoding="utf-8-sig")
+        st.success("轉換完成，請點擊下方按鈕下載 CSV 檔")
+        st.download_button(
+            label=f"📥 下載 {year_month}個人班表({code}).csv",
+            data=csv,
+            file_name=f"{year_month}個人班表({code}).csv",
+            mime="text/csv"
+        )
+    else:
+        st.error("無法從標題中擷取年份與月份。請確認第一列格式是否正確（例如：113年4月班表）")
