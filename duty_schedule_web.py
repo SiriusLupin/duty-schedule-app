@@ -153,6 +153,7 @@ if file and code:
         st.markdown(
     "<p style='color:red; font-size:18px; font-weight:bold;'>⚠ CSV 檔案直接開啟內容可能為亂碼，但不影響匯入，請先確認上方資料無誤後再點選下方按鈕下載。</p>",
     unsafe_allow_html=True
+        )
         st.download_button(
             label=f"📥 下載 {year_month}個人班表({code}).csv",
             data=csv,
