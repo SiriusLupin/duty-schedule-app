@@ -4,8 +4,8 @@ import re
 from io import BytesIO
 from openpyxl import load_workbook
 
-# ========= 使用者可編輯簡化對照表 ==========
- default_rules = [
+# ========= 使用者可編輯簡化對照表 =========
+default_rules = [
      {"原始關鍵字": "調劑複核", "簡化後": "C"},
      {"原始關鍵字": "處方判讀", "簡化後": "判讀"},
      {"原始關鍵字": "化療處方判讀", "簡化後": "化療判讀"},
