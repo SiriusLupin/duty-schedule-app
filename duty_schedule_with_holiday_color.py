@@ -125,7 +125,7 @@ def apply_time_rules(df, holiday_map, column_map):
     return df
 
 # ========== 🌐 Streamlit Web App ==========
-st.set_page_config(page_title="班表轉換工具", layout="centered")
+st.set_page_config(page_title="班表轉換工具（支援底色判斷假日）", layout="centered")
 st.title("📆 班表轉換工具（支援底色判斷假日）")
 
 with open("班表轉換操作說明v2.pdf", "rb") as f:
