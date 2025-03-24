@@ -129,7 +129,7 @@ st.set_page_config(page_title="班表轉換工具", layout="centered")
 st.title("📆 班表轉換工具（支援底色判斷假日）")
 
 with open("班表轉換成google日曆檔操作說明.pdf", "rb") as f:
-    st.download_button("📘 下載操作說明 PDF", data=f.read(), file_name="班表轉換操作說明.pdf")
+    st.download_button("📘 下載操作說明 PDF", data=f.read(), file_name="班表轉換操作說明v2.pdf")
 
 # 上傳檔案與輸入代號
 code = st.text_input("請輸入班表代號：")
