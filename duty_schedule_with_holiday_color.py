@@ -164,9 +164,9 @@ if file and code:
 
         # 解析班表
         results = []
-        for row_idx in range(3, df.shape[0]):
-            content = str(df.iat[row_idx, 0]).strip()
-            if not content or "nan" or "附　註" in content:
+       for row_idx in range(3, df.shape[0]):
+           content = str(df.iat[row_idx, 0]).strip()
+           if pd.isna(content) or "附　註" in content or content.lower() == "nan":
                 continue
             for col_idx in range(1, len(date_mapping) + 1):
                 cell = str(df.iat[row_idx, col_idx])
