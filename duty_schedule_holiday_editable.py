@@ -124,7 +124,7 @@ if file and code:
     # ========= 使用者可編輯簡化對照表 ==========
     st.subheader("🔧 字詞縮寫對照表")
     st.markdown(
-        "<p style='color:black; font-size:16px; font-weight:bold;'>輸入代碼及上傳檔案後，您可以自行修改想要的縮寫，並可由下方表格預覽。<br>也可點選右上角的"+"新增欄位自訂縮寫"</p>,
+        "<p style='color:black; font-size:16px; font-weight:bold;'>輸入代碼及上傳檔案後，您可以自行修改想要的縮寫，並可由下方表格預覽。<br>也可點選右上角的"+"新增欄位自訂縮寫"</br></p>,
         unsafe_allow_html=True
         )
     st.markdown(
