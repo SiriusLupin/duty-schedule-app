@@ -194,7 +194,7 @@ if file and code:
         csv = df_output.to_csv(index=False, encoding="utf-8-sig")
 
         st.success("✅ 轉換完成，請點擊下方按鈕下載")
-        
+        st.dataframe(df_output, use_container_width=True)        
         st.markdown(
     "<p style='color:red; font-size:18px; font-weight:bold;'>⚠ CSV 檔案直接開啟內容可能為亂碼，但不影響匯入，請先確認上方資料無誤後再點選下方按鈕下載。</p>",
     unsafe_allow_html=True
@@ -206,6 +206,6 @@ if file and code:
             file_name=f"{year_month}個人班表({code}).csv",
             mime="text/csv"
         )
-        st.dataframe(df_output, use_container_width=True)
+
     else:
         st.error("❌ 無法擷取年份與月份，請確認第一列格式為 113年4月班表 這類格式")
