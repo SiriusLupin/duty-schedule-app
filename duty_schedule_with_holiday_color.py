@@ -164,7 +164,7 @@ if file and code:
 
         # 解析班表
         results = []
-       for row_idx in range(3, df.shape[0]):
+        for row_idx in range(3, df.shape[0]):
            content = str(df.iat[row_idx, 0]).strip()
            if pd.isna(content) or "附　註" in content or content.lower() == "nan":
                 continue
