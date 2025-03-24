@@ -128,6 +128,12 @@ def apply_time_rules(df, holiday_map, column_map):
 st.set_page_config(page_title="班表轉換工具", layout="centered")
 st.title("📆 班表轉換工具（支援底色判斷假日）")
 
+with st.expander("📘 操作說明 (點此展開)", expanded=False):
+    with open("班表轉換成google日曆檔操作說明.pdf", "rb") as f:
+        base64_pdf = base64.b64encode(f.read()).decode("utf-8")
+    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
+    st.markdown(pdf_display, unsafe_allow_html=True)
+
 # 上傳檔案與輸入代號
 code = st.text_input("請輸入班表代號：")
 file = st.file_uploader("請上傳班表 Excel 檔（.xlsx）")
@@ -190,6 +196,12 @@ if file and code:
         csv = df_output.to_csv(index=False, encoding="utf-8-sig")
 
         st.success("✅ 轉換完成，請點擊下方按鈕下載")
+        
+        st.markdown(
+    "<p style='color:red; font-size:18px; font-weight:bold;'>⚠ CSV 檔案直接開啟內容可能為亂碼，但不影響匯入，請先確認上方資料無誤後再點選下方按鈕下載。</p>",
+    unsafe_allow_html=True
+        )
+
         st.download_button(
             label=f"📥 下載 {year_month}個人班表({code}).csv",
             data=csv,
