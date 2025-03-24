@@ -94,7 +94,7 @@ def apply_time_rules(df):
 st.set_page_config(page_title="班表轉換工具", layout="centered")
 st.title("📆 班表轉換工具（Google 日曆格式）")
 
-with open("班表轉換成google日曆檔操作說明.pdf", "rb") as f:
+with open("班表轉換操作說明.pdf", "rb") as f:
     st.download_button("📘 下載操作說明 PDF", data=f.read(), file_name="班表轉換操作說明.pdf")
 
 code = st.text_input("請輸入班表代號：")
