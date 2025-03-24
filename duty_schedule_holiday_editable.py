@@ -18,7 +18,8 @@ default_rules = [
  ]
 
 # ========= Streamlit App 主體 ==========
-st.title("📆 班表轉換工具（支援假日底色與可編輯簡化對照表）")
+st.write("🔍 DEBUG：目前 default_rules =", default_rules)
+st.title("📆 班表轉換工具（支援假日底色與字詞縮寫對照表）")
 with open("班表轉換操作說明v2.pdf", "rb") as f:
     st.download_button("📘 下載操作說明 PDF", data=f.read(), file_name="班表轉換操作說明v2.pdf")
 code = st.text_input("請輸入班表代號：")
