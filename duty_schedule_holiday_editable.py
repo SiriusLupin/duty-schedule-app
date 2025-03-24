@@ -202,7 +202,7 @@ if file and code:
 
         csv = df_output.to_csv(index=False, encoding="utf-8-sig")
         st.success("✅ 轉換完成，請下載：")
-
+        st.subheader("內容預覽")
         st.dataframe(df_output, use_container_width=True)
         st.markdown(
     "<p style='color:red; font-size:18px; font-weight:bold;'>⚠ CSV 檔案直接開啟內容可能為亂碼，但不影響匯入，請先確認上方資料無誤後再點選下方按鈕下載。</p>",
