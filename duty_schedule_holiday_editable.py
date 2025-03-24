@@ -4,22 +4,6 @@ import re
 from io import BytesIO
 from openpyxl import load_workbook
 
-# ========= 使用者可編輯簡化對照表 ==========
-st.subheader("🔧 可編輯簡化對照表")
-default_rules = [
-    {"原始關鍵字": "調劑複核", "簡化後": "C"},
-    {"原始關鍵字": "處方判讀", "簡化後": "判讀"},
-    {"原始關鍵字": "化療處方判讀", "簡化後": "化療判讀"},
-    {"原始關鍵字": "藥物諮詢", "簡化後": "諮詢"},
-    {"原始關鍵字": "門診藥局調劑", "簡化後": "門診"},
-    {"原始關鍵字": "抗凝藥師門診", "簡化後": "抗凝門診"},
-    {"原始關鍵字": "移植藥師門診", "簡化後": "移植門診"},
-    {"原始關鍵字": "中藥局調劑", "簡化後": "中藥局"},
-
-]
-df_rules = pd.DataFrame(default_rules)
-edited_rules = st.data_editor(df_rules, use_container_width=True, num_rows="dynamic")
-simplify_map = dict(zip(edited_rules["原始關鍵字"], edited_rules["簡化後"]))
 
 # ========= 判斷灰底是否為假日 ==========
 def build_holiday_map(file_path):
@@ -132,6 +116,27 @@ with open("班表轉換操作說明v2.pdf", "rb") as f:
 code = st.text_input("請輸入班表代號：")
 file = st.file_uploader("請上傳 Excel 班表（.xlsx）")
 
+# ========= 使用者可編輯簡化對照表 ==========
+st.subheader("🔧 字詞縮寫對照表")
+ st.markdown(
+    "<p style='color:black; font-size:16px; font-weight:bold;'>輸入代碼及上傳檔案後，您可以自行修改想要的縮寫，並可由下方表格預覽。</p>",
+    unsafe_allow_html=True
+        )
+default_rules = [
+    {"原始關鍵字": "調劑複核", "簡化後": "C"},
+    {"原始關鍵字": "處方判讀", "簡化後": "判讀"},
+    {"原始關鍵字": "化療處方判讀", "簡化後": "化療判讀"},
+    {"原始關鍵字": "藥物諮詢", "簡化後": "諮詢"},
+    {"原始關鍵字": "門診藥局調劑", "簡化後": "門診"},
+    {"原始關鍵字": "抗凝藥師門診", "簡化後": "抗凝門診"},
+    {"原始關鍵字": "移植藥師門診", "簡化後": "移植門診"},
+    {"原始關鍵字": "中藥局調劑", "簡化後": "中藥局"},
+
+]
+df_rules = pd.DataFrame(default_rules)
+edited_rules = st.data_editor(df_rules, use_container_width=True, num_rows="dynamic")
+simplify_map = dict(zip(edited_rules["原始關鍵字"], edited_rules["簡化後"]))
+
 if file and code:
     df = pd.read_excel(file, header=None)
     file.seek(0)
@@ -164,9 +169,13 @@ if file and code:
             for col_idx in range(1, len(date_mapping) + 1):
                 cell = str(df.iat[row_idx, col_idx])
                 if code in cell:
+                    #simplified = re.sub(r"\(\d{1,2}:\d{2}-\d{1,2}:\d{2}\)", "", content)
+                    #for k, v in simplify_map.items():
+                    #    simplified = simplified.replace(k, v)
                     simplified = re.sub(r"\(\d{1,2}:\d{2}-\d{1,2}:\d{2}\)", "", content)
                     for k, v in simplify_map.items():
-                        simplified = simplified.replace(k, v)
+                        if pd.notna(k) and pd.notna(v):
+                            simplified = simplified.replace(str(k), str(v))
                     results.append({
                         "日期": date_mapping[col_idx - 1]["日期"],
                         "星期": date_mapping[col_idx - 1]["星期"],
