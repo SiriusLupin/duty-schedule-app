@@ -116,10 +116,19 @@ with open("班表轉換操作說明v2.pdf", "rb") as f:
 code = st.text_input("請輸入班表代號：")
 file = st.file_uploader("請上傳 Excel 班表（.xlsx）")
 
-# ========= 使用者可編輯簡化對照表 ==========
+df_rules = pd.DataFrame(default_rules)
+edited_rules = st.data_editor(df_rules, use_container_width=True, num_rows="dynamic")
+simplify_map = dict(zip(edited_rules["原始關鍵字"], edited_rules["簡化後"]))
+
+if file and code:
+    # ========= 使用者可編輯簡化對照表 ==========
 st.subheader("🔧 字詞縮寫對照表")
- st.markdown(
-    "<p style='color:black; font-size:16px; font-weight:bold;'>輸入代碼及上傳檔案後，您可以自行修改想要的縮寫，並可由下方表格預覽。</p>",
+st.markdown(
+    "<p style='color:black; font-size:16px; font-weight:bold;'>輸入代碼及上傳檔案後，您可以自行修改想要的縮寫，並可由下方表格預覽。</p>也可點選"+"新增欄位自訂縮寫",
+    unsafe_allow_html=True
+        )
+st.markdown(
+    "<p style='color:red; font-size:18px; font-weight:bold;'>⚠注意！若留有空行程式可能發生錯誤，請將空行右側方框勾選後，右上角點選刪除。</p>",
     unsafe_allow_html=True
         )
 default_rules = [
@@ -133,11 +142,6 @@ default_rules = [
     {"原始關鍵字": "中藥局調劑", "簡化後": "中藥局"},
 
 ]
-df_rules = pd.DataFrame(default_rules)
-edited_rules = st.data_editor(df_rules, use_container_width=True, num_rows="dynamic")
-simplify_map = dict(zip(edited_rules["原始關鍵字"], edited_rules["簡化後"]))
-
-if file and code:
     df = pd.read_excel(file, header=None)
     file.seek(0)
     holiday_map = build_holiday_map(file)
