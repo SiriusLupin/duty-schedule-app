@@ -122,26 +122,26 @@ simplify_map = dict(zip(edited_rules["原始關鍵字"], edited_rules["簡化後
 
 if file and code:
     # ========= 使用者可編輯簡化對照表 ==========
-st.subheader("🔧 字詞縮寫對照表")
-st.markdown(
-    "<p style='color:black; font-size:16px; font-weight:bold;'>輸入代碼及上傳檔案後，您可以自行修改想要的縮寫，並可由下方表格預覽。</p>也可點選"+"新增欄位自訂縮寫",
-    unsafe_allow_html=True
+    st.subheader("🔧 字詞縮寫對照表")
+    st.markdown(
+        "<p style='color:black; font-size:16px; font-weight:bold;'>輸入代碼及上傳檔案後，您可以自行修改想要的縮寫，並可由下方表格預覽。</p>也可點選右上角的"+"新增欄位自訂縮寫"</p>,
+        unsafe_allow_html=True
         )
-st.markdown(
-    "<p style='color:red; font-size:18px; font-weight:bold;'>⚠注意！若留有空行程式可能發生錯誤，請將空行右側方框勾選後，右上角點選刪除。</p>",
-    unsafe_allow_html=True
+    st.markdown(
+        "<p style='color:red; font-size:18px; font-weight:bold;'>⚠注意！若留有空行程式可能發生錯誤，請將空行右側方框勾選後，右上角點選刪除。</p>",
+        unsafe_allow_html=True
         )
-default_rules = [
-    {"原始關鍵字": "調劑複核", "簡化後": "C"},
-    {"原始關鍵字": "處方判讀", "簡化後": "判讀"},
-    {"原始關鍵字": "化療處方判讀", "簡化後": "化療判讀"},
-    {"原始關鍵字": "藥物諮詢", "簡化後": "諮詢"},
-    {"原始關鍵字": "門診藥局調劑", "簡化後": "門診"},
-    {"原始關鍵字": "抗凝藥師門診", "簡化後": "抗凝門診"},
-    {"原始關鍵字": "移植藥師門診", "簡化後": "移植門診"},
-    {"原始關鍵字": "中藥局調劑", "簡化後": "中藥局"},
+    default_rules = [
+        {"原始關鍵字": "調劑複核", "簡化後": "C"},
+        {"原始關鍵字": "處方判讀", "簡化後": "判讀"},
+        {"原始關鍵字": "化療處方判讀", "簡化後": "化療判讀"},
+        {"原始關鍵字": "藥物諮詢", "簡化後": "諮詢"},
+        {"原始關鍵字": "門診藥局調劑", "簡化後": "門診"},
+        {"原始關鍵字": "抗凝藥師門診", "簡化後": "抗凝門診"},
+        {"原始關鍵字": "移植藥師門診", "簡化後": "移植門診"},
+        {"原始關鍵字": "中藥局調劑", "簡化後": "中藥局"},
 
-]
+        ]
     df = pd.read_excel(file, header=None)
     file.seek(0)
     holiday_map = build_holiday_map(file)
