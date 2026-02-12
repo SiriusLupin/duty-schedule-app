@@ -90,9 +90,9 @@ def apply_time_rules(df, holiday_map, column_map):
             if match:
                 df.at[idx, "Start Time"] = match.group(1)
                 df.at[idx, "End Time"] = match.group(2)
-         elif "中2藥局" in content:
-              match = re.search(r"\((\d{1,2}:\d{2})-(\d{1,2}:\d{2})\)", content)
-              if match:
+        elif "中2藥局" in content:
+             match = re.search(r"\((\d{1,2}:\d{2})-(\d{1,2}:\d{2})\)", content)
+             if match:
                   df.at[idx, "Start Time"] = match.group(1)
                   df.at[idx, "End Time"] = match.group(2)
 
