@@ -90,6 +90,11 @@ def apply_time_rules(df, holiday_map, column_map):
             if match:
                 df.at[idx, "Start Time"] = match.group(1)
                 df.at[idx, "End Time"] = match.group(2)
+         elif "中2藥局" in content and "發藥" in content:
+              match = re.search(r"\((\d{1,2}:\d{2})-(\d{1,2}:\d{2})\)", content)
+              if match:
+                  df.at[idx, "Start Time"] = match.group(1)
+                  df.at[idx, "End Time"] = match.group(2)
 
         elif any(k in content for k in ["處方判讀", "化療處方判讀", "藥物諮詢", "PreESRD"]):
             for key, (start, end) in prescription_time_map.items():
