@@ -97,6 +97,21 @@ def parse_year_month_from_drive_filename(file_name: str):
 
     return year, month, year_month
 
+def format_loaded_schedule_name(drive_file_name: str):
+    """
+    由 Drive 檔名（例如：11503班表）轉成顯示用名稱：115年3月班表
+    若解析不到就退回顯示原檔名
+    """
+    if not drive_file_name:
+        return None
+
+    m = re.search(r"(\d{3})(\d{2})\s*班表", drive_file_name)
+    if not m:
+        return drive_file_name
+
+    roc_year = int(m.group(1))
+    month = int(m.group(2))
+    return f"{roc_year}年{month}月班表"
 
 def download_drive_file_as_bytes(file_id: str):
     """
@@ -346,6 +361,7 @@ try:
 except FileNotFoundError:
     st.caption("（找不到操作說明 PDF 檔案；若在 Streamlit Cloud 請確認已放入 Repo）")
 
+status_box = st.empty()
 
 # ============================================================
 # 4-1) Session State 初始化：用來保存「已載入班表」與「轉換結果」
@@ -411,15 +427,33 @@ elif source == "現有共用班表檔案(3個月內)":
             return f'{f["name"]} ｜ {typ} ｜ {mt}'
 
         options = {pretty_label(f): f for f in files}
-        chosen = st.selectbox("請選擇班表檔案（近3個月更新）：", list(options.keys()))
-        selected_drive_file = options[chosen]
+        labels = list(options.keys())
 
-else:
-    drive_url_backup = st.text_input("請貼上 Google Drive / Google 試算表連結（備援）")
+        def ym_key_from_label(label: str):
+            # label 裡面包含檔名，例如：11504班表 ｜ Google試算表 ｜ ...
+            m = re.search(r"(\d{3})(\d{2})\s*班表", label)
+            if not m:
+                return -1
+            return int(m.group(1)) * 100 + int(m.group(2))  # 11504 -> 11504（可比較大小）
+
+        # 找出月份最大者當預設
+        best_label = max(labels, key=ym_key_from_label)
+        default_index = labels.index(best_label)
+
+        chosen = st.selectbox(
+            "請選擇班表檔案（近3個月更新）：",
+            labels,
+            index=default_index
+        )
+        selected_drive_file = options[chosen]
+        else:
+            drive_url_backup = st.text_input("請貼上 Google Drive / Google 試算表連結（備援）")
 
 
 # 👉 防呆：按下「載入班表」才真正去抓檔案，並把 bytes 存起來
 load_clicked = st.button("📥 載入班表", type="primary")
+if not st.session_state.loaded_excel_bytes:
+    st.warning("請先選擇班表來源，並按「📥 載入班表」。")
 
 if load_clicked:
     # 檢核來源是否已提供檔案/連結
@@ -442,15 +476,11 @@ if load_clicked:
         st.session_state.csv_text = None
         st.session_state.year_month = None
 
-        st.success("✅ 班表已載入，請輸入代號並轉換")
-
-
-# 若已載入班表，顯示狀態
-if st.session_state.loaded_excel_bytes:
-    st.info("✅ 已載入班表（可進行轉換）")
-else:
-    st.warning("尚未載入班表，請先選擇來源並按「載入班表」")
-
+        pretty_name = format_loaded_schedule_name(st.session_state.loaded_drive_file_name)
+        if pretty_name:
+            status_box.success(f"✅ 班表已載入：{pretty_name}（請輸入代號並轉換）")
+        else:
+            status_box.success("✅ 班表已載入，請輸入代號並轉換")
 
 # ============================================================
 # 4-3) Step 2：輸入代號
@@ -593,6 +623,7 @@ if convert_clicked:
             st.session_state.csv_text = csv_text
             st.session_state.year_month = year_month
             st.success("✅ 轉換完成，請先確認預覽內容")
+            status_box.info("✅ 已完成轉換：請先確認下方預覽，若需要可調整縮寫後重新轉換。")
 
 
 # ============================================================
