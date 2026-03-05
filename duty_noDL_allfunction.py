@@ -76,28 +76,51 @@ def extract_drive_file_id(url: str) -> str | None:
             return m.group(1)
     return None
 
+def parse_year_month_from_drive_filename(file_name: str):
+    """
+    解析 Drive 檔名格式：11503班表（民國年3碼 + 月2碼）
+    回傳 (year_ad, month, year_month_str) 例如 (2026, 3, "202603")
+    抓不到就回 None
+    """
+    if not file_name:
+        return None
 
-def download_drive_file_as_bytes(file_id: str) -> io.BytesIO:
+    # 支援：11503班表、11503 班表、11503班表.xlsx（若是xlsx也可能有副檔名）
+    m = re.search(r"(\d{3})(\d{2})\s*班表", file_name)
+    if not m:
+        return None
+
+    roc_year = int(m.group(1))        # 例如 115
+    month = int(m.group(2))           # 例如 03
+    year = roc_year + 1911            # 民國->西元
+    year_month = f"{year}{month:02d}" # 例如 202603
+
+    return year, month, year_month
+
+
+def download_drive_file_as_bytes(file_id: str):
     """
     下載 Google Drive 檔案成 BytesIO（記憶體檔案），供 pandas/openpyxl 讀取。
     同時支援：
     A) Google 試算表（原生） -> export 成 xlsx
     B) 真正 .xlsx 檔 -> get_media 直接下載
+
+    回傳：(bio, file_name)
     """
     service = build_drive_service()
     meta = service.files().get(fileId=file_id, fields="name,mimeType").execute()
+
+    file_name = meta.get("name", "")
     mime = meta.get("mimeType", "")
 
     bio = io.BytesIO()
 
-    # Google Sheets -> 匯出成 XLSX
     if mime == "application/vnd.google-apps.spreadsheet":
         request = service.files().export_media(
             fileId=file_id,
             mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
-        # 例如 .xlsx
         request = service.files().get_media(fileId=file_id)
 
     downloader = MediaIoBaseDownload(bio, request)
@@ -106,8 +129,7 @@ def download_drive_file_as_bytes(file_id: str) -> io.BytesIO:
         _, done = downloader.next_chunk()
 
     bio.seek(0)
-    return bio
-
+    return bio, file_name
 
 def list_recent_drive_files(months_approx_days: int = 92, page_size: int = 100):
     """
@@ -143,28 +165,27 @@ def list_recent_drive_files(months_approx_days: int = 92, page_size: int = 100):
 
 def get_excel_bio(source_choice: str, uploaded_file, selected_drive_file, drive_url_backup: str):
     """
-    統一回傳 BytesIO，讓後續解析只寫一套。
-    source_choice：
-      - 上傳 Excel
-      - Google Drive（近3個月下拉選）
-      - Google Drive（貼連結備援）
+    統一回傳 (BytesIO, drive_file_name)
+    - 上傳 Excel：drive_file_name 回 None（因為你說不想用上傳檔名判斷）
+    - Drive 下拉選 / 貼連結：drive_file_name 回傳 Drive 檔名
     """
     if source_choice == "上傳 Excel":
         if not uploaded_file:
-            return None
+            return None, None
         data = uploaded_file.read()
         bio = io.BytesIO(data)
         bio.seek(0)
-        return bio
+        return bio, None
 
     if source_choice == "現有共用班表檔案(3個月內)":
         if not selected_drive_file:
-            return None
+            return None, None
         return download_drive_file_as_bytes(selected_drive_file["id"])
 
     # 貼連結備援
     if not drive_url_backup:
-        return None
+        return None, None
+
     file_id = extract_drive_file_id(drive_url_backup)
     if not file_id:
         st.error("❌ 無法從連結解析檔案 ID，請確認貼的是 Drive/Sheet 分享連結。")
@@ -175,7 +196,6 @@ def get_excel_bio(source_choice: str, uploaded_file, selected_drive_file, drive_
     except Exception as e:
         st.error(f"❌ 從 Google Drive 下載失敗：{e}")
         st.stop()
-
 
 # ============================================================
 # 2) 灰底假日判斷：第二列日期底色（灰色=假日）
@@ -390,7 +410,7 @@ simplify_map = dict(zip(edited_rules["原始關鍵字"], edited_rules["簡化後
 # ============================================================
 # 5) 主流程：讀檔 -> 假日底色 -> 解析日期/星期 -> 找代號 -> 縮寫 -> 時間 -> 輸出
 # ============================================================
-excel_bio = get_excel_bio(source, uploaded_file, selected_drive_file, drive_url_backup)
+excel_bio, drive_file_name = get_excel_bio(source, uploaded_file, selected_drive_file, drive_url_backup)
 
 if code and excel_bio:
     # (A) 讀 Excel 成 DataFrame
@@ -400,16 +420,31 @@ if code and excel_bio:
     # (B) 底色判斷假日
     holiday_map = build_holiday_map(excel_bio)
 
-    # (C) 從第一列標題抓民國年與月份（例如：113年4月班表）
-    title = str(df.iat[0, 0])
-    m = re.search(r"(\d{2,3})年(\d{1,2})月", title)
-    if not m:
-        st.error("❌ 無法擷取年份與月份，請確認標題格式如『113年4月班表』")
-        st.stop()
+    # (C) 解析年月：Drive 來源優先用 Drive 檔名（11503班表），否則用首列標題（113年4月班表）
+    year = None
+    month = None
+    year_month = None
 
-    year = int(m.group(1)) + 1911
-    month = int(m.group(2))
-    year_month = f"{year}{month:02d}"
+    # 1) 若是 Drive 來源（下拉選/貼連結），優先用 Drive 檔名
+    if source in ["現有共用班表檔案(3個月內)", "試算表連結"]:
+        parsed = parse_year_month_from_drive_filename(drive_file_name)
+        if parsed:
+            year, month, year_month = parsed
+        else:
+            st.error(f"❌ 無法從 Drive 檔名解析年月：{drive_file_name}\n請確認檔名格式為 11503班表")
+            st.stop()
+
+    # 2) 若是上傳 Excel，沿用你原本的「首列標題」解析邏輯（備援）
+    else:
+        title = str(df.iat[0, 0])
+        m = re.search(r"(\d{2,3})年(\d{1,2})月", title)
+        if not m:
+            st.error("❌ 無法從首列標題解析年月，請確認格式如『113年4月班表』")
+            st.stop()
+
+        year = int(m.group(1)) + 1911
+        month = int(m.group(2))
+        year_month = f"{year}{month:02d}"
 
     # (D) 第二、三列為日期與星期（B欄開始）
     dates = df.iloc[1, 1:].tolist()
