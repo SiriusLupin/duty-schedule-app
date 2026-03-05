@@ -367,9 +367,6 @@ try:
 except FileNotFoundError:
     st.caption("（找不到操作說明 PDF 檔案；若在 Streamlit Cloud 請確認已放入 Repo）")
 
-# 用 placeholder 統一顯示狀態（載入/轉換）
-status_box = st.empty()
-
 # ============================================================
 # 4-1) Session State 初始化：保存「已載入班表」與「轉換結果」
 # ============================================================
@@ -449,6 +446,9 @@ else:
 
 # 👉 防呆：按下「載入班表」才真正去抓檔案，並把 bytes 存起來
 load_clicked = st.button("📥 載入班表", type="primary")
+
+# 用 placeholder 統一顯示狀態（載入/轉換）
+status_box = st.empty()
 
 # 尚未載入時，用同一個 status_box 提示（之後載入成功/轉換成功會被覆蓋）
 if not st.session_state.loaded_excel_bytes:
