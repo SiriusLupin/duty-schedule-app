@@ -450,8 +450,9 @@ else:
 # 👉 防呆：按下「載入班表」才真正去抓檔案，並把 bytes 存起來
 load_clicked = st.button("📥 載入班表", type="primary")
 
+# 尚未載入時，用同一個 status_box 提示（之後載入成功/轉換成功會被覆蓋）
 if not st.session_state.loaded_excel_bytes:
-    st.warning("請先選擇班表來源，並按「📥 載入班表」。")
+    status_box.warning("請先選擇班表來源，並按「📥 載入班表」。")
 
 if load_clicked:
     if source == "上傳 Excel" and uploaded_file is None:
