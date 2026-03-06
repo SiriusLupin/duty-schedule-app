@@ -332,7 +332,7 @@ def apply_time_rules(df, holiday_map, column_map):
                 "日期": row["日期"],
                 "星期": row["星期"],
                 "工作內容": "非常班之諮詢與藥動服務",
-                "簡化後內容": "非常班之諮詢與藥動服務",  # 後面仍會做簡化 replace
+                "簡化後內容": "小夜oncall",  # 後面仍會做簡化 replace
                 "Start Time": "17:30",
                 "End Time": "21:30"
             })
