@@ -26,7 +26,8 @@ default_rules = [
     {"原始關鍵字": "抗凝藥師門診", "簡化後": "抗凝門診"},
     {"原始關鍵字": "移植藥師門診", "簡化後": "移植門診"},
     {"原始關鍵字": "中藥局調劑", "簡化後": "中藥局"},
-    {"原始關鍵字": "非常班之諮詢與藥動服務", "簡化後": "假日oncall"},
+    {"原始關鍵字": "假日非常班之諮詢與藥動服務", "簡化後": "假日oncall"},
+    {"原始關鍵字": "非常班之諮詢與藥動服務", "簡化後": "oncall"},
 ]
 
 
@@ -337,7 +338,7 @@ def apply_time_rules(df, holiday_map, column_map):
             })
 
         # 9) 假日：「非常班之諮詢與藥動服務」三班
-        if "非常班之諮詢與藥動服務" in content and is_holiday:
+        if "假日非常班之諮詢與藥動服務" in content and is_holiday:
             if "上午" in content:
                 df.at[idx, "Start Time"] = "08:00"
                 df.at[idx, "End Time"] = "12:30"
