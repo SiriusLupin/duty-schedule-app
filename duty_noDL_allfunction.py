@@ -551,27 +551,45 @@ def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str
 CHANGELOG_ITEMS = [
     {
         "date": "2026-03-06",
-        "version": "v3.0",
+        "version": "v3.3",
         "title": "新增三個頁籤",
         "content": "頁面改為「主程式 / 留言回饋 / 更新日誌」，減少單頁資訊量，讓主要操作更集中。"
     },
     {
         "date": "2026-03-06",
-        "version": "v3.0",
+        "version": "v3.2",
         "title": "新增留言回饋頁",
         "content": "留言回饋改用 Google Sheet 做後端，可保存時間、暱稱、留言內容、班表來源、班表檔名與代號。"
     },
     {
         "date": "2026-03-06",
-        "version": "v3.0",
+        "version": "v3.1",
         "title": "共用班表預設選取優化",
         "content": "預設班表來源改為「現有共用班表檔案(3個月內)」，並自動預選檔名月份最大的班表。"
     },
     {
-        "date": "2026-03-06",
+        "date": "2026-03-05",
         "version": "v3.0",
-        "title": "狀態訊息整合",
-        "content": "使用單一狀態框顯示「請先載入班表 / 班表已載入 / 已完成轉換」等提示，避免出現重複訊息。"
+        "title": "班表來源更新",
+        "content": "將班表來源改為連線現有共用班表檔案、上傳班表檔案或班表連結。"
+    },
+    {
+        "date": "2025-03-24",
+        "version": "v2.1",
+        "title": "提供縮寫清單供使用者自行修改",
+        "content": "除預設縮寫外，使用者可自行輸入想要的縮寫"
+    },
+    {
+        "date": "2025-03-24",
+        "version": "v2.0",
+        "title": "修正假日判別邏輯",
+        "content": "以班表日期之底色判定是否為假日"
+    },
+    {
+        "date": "2025-03-21",
+        "version": "v1.0",
+        "title": "班表轉換工具上線",
+        "content": "將電子班表下載後，上傳後可產出日曆檔匯入google日曆"
     },
 ]
 
@@ -812,14 +830,13 @@ with tab_feedback:
                 st.markdown(
                     f"""
                     <div style="
-                        border:1px solid #E5E7EB;
+                        border:1px solid rgba(128,128,128,0.3);
                         border-radius:12px;
                         padding:12px 14px;
                         margin-bottom:10px;
-                        background-color:#FAFAFA;
                     ">
                         <div style="font-weight:700; margin-bottom:4px;">{name_text}</div>
-                        <div style="color:#6B7280; font-size:12px; margin-bottom:8px;">{time_text}</div>
+                        <div style="opacity:0.7; font-size:12px; margin-bottom:8px;">{time_text}</div>
                         <div style="white-space:pre-wrap; margin-bottom:8px;">{msg_text}</div>
                         <div style="color:#6B7280; font-size:12px;">{meta}</div>
                     </div>
@@ -873,13 +890,14 @@ with tab_changelog:
         st.markdown(
             f"""
             <div style="
+            <div style="
                 border-left:4px solid #3B82F6;
-                background-color:#F8FAFC;
                 padding:12px 14px;
                 margin-bottom:12px;
                 border-radius:8px;
+                border:1px solid rgba(128,128,128,0.25);
             ">
-                <div style="font-size:12px; color:#64748B; margin-bottom:4px;">
+                <div style="font-size:12px; opacity:0.7; margin-bottom:4px;">
                     {item["date"]} ｜ {item["version"]}
                 </div>
                 <div style="font-weight:700; margin-bottom:6px;">
