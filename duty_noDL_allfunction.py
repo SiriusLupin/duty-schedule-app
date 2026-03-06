@@ -645,8 +645,6 @@ if st.session_state.df_output is not None:
         )
 
 
-    # ✅ 用 form：讓「修改 + 按下套用」變成一次提交，避免 data_editor rerun 吃掉按鈕事件
-    with st.form("rules_form"):
         edited = st.data_editor(
             st.session_state.edited_rules,
             use_container_width=True,
@@ -654,31 +652,10 @@ if st.session_state.df_output is not None:
             key="rules_editor"
         )
 
-        re_submit = st.form_submit_button("♻️ 套用縮寫並重新轉換")
-
-    # 只有按下 submit 才真的更新並重轉
-    if re_submit:
         st.session_state.edited_rules = edited
 
-        df_rules_now = st.session_state.edited_rules
-        simplify_map_now = dict(zip(df_rules_now["原始關鍵字"], df_rules_now["簡化後"]))
+        st.info("✏️ 修改縮寫後，請重新按上方「🚀 轉換 / 預覽」更新結果。")
 
-        df_output, csv_text, year_month = run_convert(
-            code=st.session_state.last_code,
-            source=st.session_state.last_source,
-            excel_bytes=st.session_state.loaded_excel_bytes,
-            drive_file_name=st.session_state.loaded_drive_file_name,
-            simplify_map=simplify_map_now
-        )
-
-        if df_output is not None:
-            st.session_state.df_output = df_output
-            st.session_state.csv_text = csv_text
-            st.session_state.year_month = year_month
-            status_box.info("✅ 已重新轉換：請回到上方預覽確認")
-
-            # ✅ 強制 rerun，讓上方預覽立即刷新（使用者體感會很明顯）
-            st.rerun()
 
     st.download_button(
         label=f"📥 下載 {st.session_state.year_month}個人班表({st.session_state.last_code}).csv",
