@@ -327,15 +327,15 @@ def apply_time_rules(df, holiday_map, column_map):
             df.at[idx, "End Time"] = "20:00"
 
         # 8) 平日：若工作為「處方判讀 7-住院」，額外新增「非常班之諮詢與藥動服務」17:30-21:30
-        if "處方判讀 7-住院" in content and not is_holiday:
-            extra_rows.append({
-                "日期": row["日期"],
-                "星期": row["星期"],
-                "工作內容": "非常班之諮詢與藥動服務",
-                "簡化後內容": "小夜oncall",  # 後面仍會做簡化 replace
-                "Start Time": "17:30",
-                "End Time": "21:30"
-            })
+        #if "處方判讀 7-住院" in content and not is_holiday:
+        #    extra_rows.append({
+        #        "日期": row["日期"],
+        #        "星期": row["星期"],
+        #        "工作內容": "非常班之諮詢與藥動服務",
+        #        "簡化後內容": "小夜oncall",  # 後面仍會做簡化 replace
+        #        "Start Time": "17:30",
+        #        "End Time": "21:30"
+        #    })
 
         # 9) 假日：「非常班之諮詢與藥動服務」三班
         if "假日非常班之諮詢與藥動服務" in content and is_holiday:
