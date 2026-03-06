@@ -31,7 +31,43 @@ default_rules = [
 
 
 # ============================================================
-# 1) Google Drive 下載/列檔工具（Service Account）
+# 1) Google Drive / Google Sheets API 共用設定
+# ============================================================
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/spreadsheets",
+]
+
+
+def build_credentials():
+    """
+    從 Streamlit secrets 建立 Service Account 憑證。
+    """
+    if "gcp_service_account" not in st.secrets:
+        st.error("❌ 找不到 st.secrets['gcp_service_account']，請先設定 Streamlit Secrets。")
+        st.stop()
+
+    creds = service_account.Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=SCOPES
+    )
+    return creds
+
+
+def build_drive_service():
+    """建立 Google Drive API client。"""
+    creds = build_credentials()
+    return build("drive", "v3", credentials=creds)
+
+
+def build_sheets_service():
+    """建立 Google Sheets API client。"""
+    creds = build_credentials()
+    return build("sheets", "v4", credentials=creds)
+
+
+# ============================================================
+# 2) Google Drive 下載/列檔工具（Service Account）
 # ============================================================
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
@@ -219,7 +255,7 @@ def get_excel_bio(source_choice: str, uploaded_file, selected_drive_file, drive_
 
 
 # ============================================================
-# 2) 灰底假日判斷：第二列日期底色（灰色=假日）
+# 3) 灰底假日判斷：第二列日期底色（灰色=假日）
 # ============================================================
 def build_holiday_map(excel_bio: io.BytesIO) -> dict[int, bool]:
     """
@@ -245,7 +281,7 @@ def build_holiday_map(excel_bio: io.BytesIO) -> dict[int, bool]:
 
 
 # ============================================================
-# 3) 套用時間規則（含你新增的中2藥局發藥括號時間）
+# 4) 套用時間規則（含你新增的中2藥局發藥括號時間）
 # ============================================================
 def apply_time_rules(df, holiday_map, column_map):
     """
@@ -353,159 +389,81 @@ def apply_time_rules(df, holiday_map, column_map):
 
     return df
 
-
 # ============================================================
-# 4) Streamlit UI（新流程）
-#    先選班表 → 輸入代號 → 轉換預覽 → 調縮寫重新轉換 → 下載
+# 5) 回饋留言板：Google Sheet 作為後端
 # ============================================================
-st.title("📆 班表轉換工具")
+def append_feedback_to_sheet(spreadsheet_id: str, values: list):
+    """
+    新增一列留言到回饋試算表。
+    欄位建議：
+    A 時間
+    B 暱稱
+    C 留言內容
+    D 班表來源
+    E 班表檔名
+    F 代號
+    """
+    service = build_sheets_service()
+    body = {"values": [values]}
+    service.spreadsheets().values().append(
+        spreadsheetId=spreadsheet_id,
+        range="A1",
+        valueInputOption="RAW",
+        insertDataOption="INSERT_ROWS",
+        body=body
+    ).execute()
 
-# 操作說明（下載）
-try:
-    with open("操作說明v3.pdf", "rb") as f:
-        st.download_button("📘 下載操作說明 PDF", data=f.read(), file_name="操作說明v3.pdf")
-except FileNotFoundError:
-    st.caption("（找不到操作說明 PDF 檔案；若在 Streamlit Cloud 請確認已放入 Repo）")
 
-# ============================================================
-# 4-1) Session State 初始化：保存「已載入班表」與「轉換結果」
-# ============================================================
-if "loaded_excel_bytes" not in st.session_state:
-    st.session_state.loaded_excel_bytes = None
-if "loaded_drive_file_name" not in st.session_state:
-    st.session_state.loaded_drive_file_name = None
-if "last_source" not in st.session_state:
-    st.session_state.last_source = None
-if "last_code" not in st.session_state:
-    st.session_state.last_code = None
-if "df_output" not in st.session_state:
-    st.session_state.df_output = None
-if "csv_text" not in st.session_state:
-    st.session_state.csv_text = None
-if "year_month" not in st.session_state:
-    st.session_state.year_month = None
-if "edited_rules" not in st.session_state:
-    st.session_state.edited_rules = pd.DataFrame(default_rules)
+def read_feedback_from_sheet(spreadsheet_id: str):
+    """
+    讀取回饋試算表內容並轉成 DataFrame。
+    預設第一列為標題列：
+    time, name, message, source, file_name, code
+    """
+    service = build_sheets_service()
+    resp = service.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range="A:F"
+    ).execute()
 
-# ============================================================
-# 4-2) Step 1：先選班表（預設：現有共用班表檔案）
-# ============================================================
-st.subheader("① 先選班表")
+    values = resp.get("values", [])
 
-source = st.radio(
-    "選擇班表來源：",
-    ["上傳 Excel", "現有共用班表檔案(3個月內)", "試算表連結"],
-    index=1,  # ✅ 預設勾選「現有共用班表檔案(3個月內)」
-    horizontal=False
-)
+    if not values:
+        return pd.DataFrame(columns=["time", "name", "message", "source", "file_name", "code"])
 
-uploaded_file = None
-selected_drive_file = None
-drive_url_backup = ""
+    if len(values) == 1:
+        return pd.DataFrame(columns=values[0])
 
-if source == "上傳 Excel":
-    uploaded_file = st.file_uploader("請上傳 Excel 班表（.xlsx）")
+    header = values[0]
+    rows = values[1:]
 
-elif source == "現有共用班表檔案(3個月內)":
-    try:
-        files = list_recent_drive_files(months_approx_days=92, page_size=100)
-    except Exception as e:
-        st.error(f"❌ 無法列出 Google Drive 檔案：{e}")
-        files = []
+    normalized_rows = []
+    for row in rows:
+        row = row + [""] * (len(header) - len(row))
+        normalized_rows.append(row[:len(header)])
 
-    if not files:
-        st.warning("目前 Service Account 近3個月內看不到任何 Excel/試算表。請確認：主管有共享檔案給服務帳號，且檔案近期有更新。")
-    else:
-        def pretty_label(f):
-            typ = "Google試算表" if f["mimeType"] == "application/vnd.google-apps.spreadsheet" else "Excel(.xlsx)"
-            mt = f.get("modifiedTime", "")
-            return f'{f["name"]} ｜ {typ} ｜ {mt}'
+    df = pd.DataFrame(normalized_rows, columns=header)
 
-        options = {pretty_label(f): f for f in files}
-        labels = list(options.keys())
+    if "time" in df.columns:
+        df = df.sort_values(by="time", ascending=False, kind="mergesort")
 
-        def ym_key_from_label(label: str):
-            # label 裡面包含檔名，例如：11504班表 ｜ Google試算表 ｜ ...
-            m = re.search(r"(\d{3})(\d{2})\s*班表", label)
-            if not m:
-                return -1
-            return int(m.group(1)) * 100 + int(m.group(2))  # 11504 -> 11504（可比較大小）
-
-        best_label = max(labels, key=ym_key_from_label)
-        default_index = labels.index(best_label)
-
-        chosen = st.selectbox(
-            "請選擇班表檔案（近3個月更新）：",
-            labels,
-            index=default_index
-        )
-        selected_drive_file = options[chosen]
-
-else:
-    drive_url_backup = st.text_input("請貼上 Google Drive / Google 試算表連結（備援）")
-
-# 👉 防呆：按下「載入班表」才真正去抓檔案，並把 bytes 存起來
-load_clicked = st.button("📥 載入班表", type="primary")
-
-# 用 placeholder 統一顯示狀態（載入/轉換）
-status_box = st.empty()
-
-# 尚未載入時，用同一個 status_box 提示（之後載入成功/轉換成功會被覆蓋）
-if not st.session_state.loaded_excel_bytes:
-    status_box.warning("請先選擇班表來源，並按「📥 載入班表」。")
-
-if load_clicked:
-    if source == "上傳 Excel" and uploaded_file is None:
-        st.error("❌ 請先上傳 Excel 檔案")
-        st.stop()
-    if source == "現有共用班表檔案(3個月內)" and selected_drive_file is None:
-        st.error("❌ 請先從清單選擇一份班表")
-        st.stop()
-    if source == "試算表連結" and not drive_url_backup.strip():
-        st.error("❌ 請先貼上試算表/Drive 連結")
-        st.stop()
-
-    excel_bio, drive_file_name = get_excel_bio(source, uploaded_file, selected_drive_file, drive_url_backup)
-
-    st.session_state.loaded_excel_bytes = excel_bio.getvalue()
-    st.session_state.loaded_drive_file_name = drive_file_name
-    st.session_state.last_source = source
-
-    # 重新載入新班表時，清掉舊結果
-    st.session_state.df_output = None
-    st.session_state.csv_text = None
-    st.session_state.year_month = None
-
-    pretty_name = format_loaded_schedule_name(st.session_state.loaded_drive_file_name)
-    if pretty_name:
-        status_box.success(f"✅ 班表已載入：{pretty_name}（請輸入代號並轉換）")
-    else:
-        status_box.success("✅ 班表已載入，請輸入代號並轉換")
-
-# ============================================================
-# 4-3) Step 2：輸入代號
-# ============================================================
-st.subheader("② 再輸入班表代號")
-code = st.text_input("班表代號：", value=(st.session_state.last_code or ""))
+    return df
 
 
 # ============================================================
-# 5) 轉換函式：給「轉換/預覽」與「重新轉換」共用
+# 6) 轉換核心邏輯：主程式 tab 共用
 # ============================================================
 def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str, simplify_map: dict):
+    """
+    將已載入的班表 bytes + 班表代號 + 縮寫表
+    轉為 Google Calendar 可匯入的 CSV DataFrame。
+    """
     excel_bio = io.BytesIO(excel_bytes)
 
-    # (A) 讀 Excel 成 DataFrame
     excel_bio.seek(0)
     df = pd.read_excel(excel_bio, header=None)
 
-    # (B) 底色判斷假日
     holiday_map = build_holiday_map(io.BytesIO(excel_bytes))
-
-    # (C) 解析年月：Drive 來源優先用 Drive 檔名（11503班表），否則用首列標題（備援）
-    year = None
-    month = None
-    year_month = None
 
     if source in ["現有共用班表檔案(3個月內)", "試算表連結"]:
         parsed = parse_year_month_from_drive_filename(drive_file_name)
@@ -524,7 +482,6 @@ def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str
         month = int(m.group(2))
         year_month = f"{year}{month:02d}"
 
-    # (D) 第二、三列為日期與星期（B欄開始）
     dates = df.iloc[1, 1:].tolist()
     weekdays = df.iloc[2, 1:].tolist()
 
@@ -539,7 +496,6 @@ def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str
         for i, entry in enumerate(date_mapping)
     }
 
-    # (E) 掃描 A 欄工作內容，找出含「代號」的日期欄
     results = []
     for row_idx in range(3, df.shape[0]):
         raw = df.iat[row_idx, 0]
@@ -559,7 +515,8 @@ def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str
             cell_str = "" if pd.isna(cell) else str(cell)
 
             if code in cell_str:
-                simplified = re.sub(r"\(\d{1,2}:\d{2}-\d{1,2}:\d{2}\)", "", content)
+                simplified = re.sub(r"\((\d{1,2}:\d{2})-(\d{1,2}:\d{2})\)", "", content)
+
                 for k, v in simplify_map.items():
                     if pd.notna(k) and pd.notna(v):
                         simplified = simplified.replace(str(k), str(v))
@@ -576,12 +533,10 @@ def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str
         st.warning("找不到符合此代號的班表內容。請確認代號是否正確，或該月未排班。")
         return None, None, None
 
-    # (H) 套用時間規則
     df_result["Start Time"] = ""
     df_result["End Time"] = ""
     df_result = apply_time_rules(df_result, holiday_map, col_index_map)
 
-    # (I) 輸出 Google Calendar CSV 欄位
     df_output = df_result.rename(columns={"簡化後內容": "Subject", "日期": "Start Date"})
     df_output["End Date"] = df_output["Start Date"]
     df_output = df_output[["Subject", "Start Date", "Start Time", "End Date", "End Time"]]
@@ -591,75 +546,349 @@ def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str
 
 
 # ============================================================
-# 4-4) Step 3：轉換＆預覽（按按鈕才做）
+# 7) 更新日誌：純文字但較美觀
 # ============================================================
-st.subheader("③ 轉換並預覽")
-
-convert_clicked = st.button("🚀 轉換 / 預覽")
-
-if convert_clicked:
-    if not st.session_state.loaded_excel_bytes:
-        st.error("❌ 請先在步驟①按「載入班表」")
-    elif not code.strip():
-        st.error("❌ 請先輸入班表代號")
-    else:
-        st.session_state.last_code = code.strip()
-
-        # 用目前 session_state 的縮寫規則（預設就是 default_rules；使用者改完也會存在這裡）
-        df_rules_now = st.session_state.edited_rules
-        simplify_map_now = dict(zip(df_rules_now["原始關鍵字"], df_rules_now["簡化後"]))
-
-        df_output, csv_text, year_month = run_convert(
-            code=code.strip(),
-            source=st.session_state.last_source,
-            excel_bytes=st.session_state.loaded_excel_bytes,
-            drive_file_name=st.session_state.loaded_drive_file_name,
-            simplify_map=simplify_map_now
-        )
-
-        if df_output is not None:
-            st.session_state.df_output = df_output
-            st.session_state.csv_text = csv_text
-            st.session_state.year_month = year_month
-
-            status_box.info("✅ 已完成轉換：請先確認下方預覽，若需要可調整縮寫後重新轉換。")
+CHANGELOG_ITEMS = [
+    {
+        "date": "2026-03-06",
+        "version": "v3.0",
+        "title": "新增三個頁籤",
+        "content": "頁面改為「主程式 / 留言回饋 / 更新日誌」，減少單頁資訊量，讓主要操作更集中。"
+    },
+    {
+        "date": "2026-03-06",
+        "version": "v3.0",
+        "title": "新增留言回饋頁",
+        "content": "留言回饋改用 Google Sheet 做後端，可保存時間、暱稱、留言內容、班表來源、班表檔名與代號。"
+    },
+    {
+        "date": "2026-03-06",
+        "version": "v3.0",
+        "title": "共用班表預設選取優化",
+        "content": "預設班表來源改為「現有共用班表檔案(3個月內)」，並自動預選檔名月份最大的班表。"
+    },
+    {
+        "date": "2026-03-06",
+        "version": "v3.0",
+        "title": "狀態訊息整合",
+        "content": "使用單一狀態框顯示「請先載入班表 / 班表已載入 / 已完成轉換」等提示，避免出現重複訊息。"
+    },
+]
 
 
 # ============================================================
-# 4-5) 預覽 → 調縮寫重新轉換 → 下載
+# 8) 頁面設定與 Session State 初始化
 # ============================================================
-if st.session_state.df_output is not None:
-    st.subheader("📋 內容預覽")
-    st.dataframe(st.session_state.df_output, use_container_width=True)
+st.set_page_config(page_title="班表轉換工具", page_icon="📆", layout="centered")
 
-    st.markdown(
-        "<p style='color:red; font-size:18px; font-weight:bold;'>⚠ CSV 檔案直接開啟內容可能為亂碼，但不影響匯入，請先確認上方資料無誤後再下載。</p>",
-        unsafe_allow_html=True
+if "loaded_excel_bytes" not in st.session_state:
+    st.session_state.loaded_excel_bytes = None
+if "loaded_drive_file_name" not in st.session_state:
+    st.session_state.loaded_drive_file_name = None
+if "last_source" not in st.session_state:
+    st.session_state.last_source = None
+if "last_code" not in st.session_state:
+    st.session_state.last_code = None
+if "df_output" not in st.session_state:
+    st.session_state.df_output = None
+if "csv_text" not in st.session_state:
+    st.session_state.csv_text = None
+if "year_month" not in st.session_state:
+    st.session_state.year_month = None
+if "edited_rules" not in st.session_state:
+    st.session_state.edited_rules = pd.DataFrame(default_rules)
+
+
+# ============================================================
+# 9) 頁面主體：三個頁籤
+# ============================================================
+st.title("📆 班表轉換工具")
+
+tab_main, tab_feedback, tab_changelog = st.tabs(["主程式", "留言回饋", "更新日誌"])
+
+
+# ============================================================
+# Tab 1：主程式
+# ============================================================
+with tab_main:
+    try:
+        with open("操作說明v3.pdf", "rb") as f:
+            st.download_button("📘 下載操作說明 PDF", data=f.read(), file_name="操作說明v3.pdf")
+    except FileNotFoundError:
+        st.caption("（找不到操作說明 PDF 檔案；若在 Streamlit Cloud 請確認已放入 Repo）")
+
+    status_box = st.empty()
+
+    st.subheader("① 先選班表")
+
+    source = st.radio(
+        "選擇班表來源：",
+        ["上傳 Excel", "現有共用班表檔案(3個月內)", "試算表連結"],
+        index=1,
+        horizontal=False
     )
 
-    # --- 縮寫表放在預覽下方（符合你要的流程）---
-    with st.expander("🔧 不滿意？在這裡調整縮寫後重新轉換", expanded=False):
+    uploaded_file = None
+    selected_drive_file = None
+    drive_url_backup = ""
+
+    if source == "上傳 Excel":
+        uploaded_file = st.file_uploader("請上傳 Excel 班表（.xlsx）")
+
+    elif source == "現有共用班表檔案(3個月內)":
+        try:
+            files = list_recent_drive_files(months_approx_days=92, page_size=100)
+        except Exception as e:
+            st.error(f"❌ 無法列出 Google Drive 檔案：{e}")
+            files = []
+
+        if not files:
+            st.warning("目前 Service Account 近3個月內看不到任何 Excel/試算表。請確認：主管有共享檔案給服務帳號，且檔案近期有更新。")
+        else:
+            def pretty_label(f):
+                typ = "Google試算表" if f["mimeType"] == "application/vnd.google-apps.spreadsheet" else "Excel(.xlsx)"
+                mt = f.get("modifiedTime", "")
+                return f'{f["name"]} ｜ {typ} ｜ {mt}'
+
+            options = {pretty_label(f): f for f in files}
+            labels = list(options.keys())
+
+            def ym_key_from_label(label: str):
+                m = re.search(r"(\d{3})(\d{2})\s*班表", label)
+                if not m:
+                    return -1
+                return int(m.group(1)) * 100 + int(m.group(2))
+
+            best_label = max(labels, key=ym_key_from_label)
+            default_index = labels.index(best_label)
+
+            chosen = st.selectbox(
+                "請選擇班表檔案（近3個月更新）：",
+                labels,
+                index=default_index
+            )
+            selected_drive_file = options[chosen]
+
+    else:
+        drive_url_backup = st.text_input("請貼上 Google Drive / Google 試算表連結（備援）")
+
+    load_clicked = st.button("📥 載入班表", type="primary")
+
+    if not st.session_state.loaded_excel_bytes:
+        status_box.warning("請先選擇班表來源，並按「📥 載入班表」。")
+
+    if load_clicked:
+        if source == "上傳 Excel" and uploaded_file is None:
+            st.error("❌ 請先上傳 Excel 檔案")
+            st.stop()
+
+        if source == "現有共用班表檔案(3個月內)" and selected_drive_file is None:
+            st.error("❌ 請先從清單選擇一份班表")
+            st.stop()
+
+        if source == "試算表連結" and not drive_url_backup.strip():
+            st.error("❌ 請先貼上試算表 / Drive 連結")
+            st.stop()
+
+        excel_bio, drive_file_name = get_excel_bio(source, uploaded_file, selected_drive_file, drive_url_backup)
+
+        st.session_state.loaded_excel_bytes = excel_bio.getvalue()
+        st.session_state.loaded_drive_file_name = drive_file_name
+        st.session_state.last_source = source
+
+        st.session_state.df_output = None
+        st.session_state.csv_text = None
+        st.session_state.year_month = None
+
+        pretty_name = format_loaded_schedule_name(st.session_state.loaded_drive_file_name)
+        if pretty_name:
+            status_box.success(f"✅ 班表已載入：{pretty_name}（請輸入代號並轉換）")
+        else:
+            status_box.success("✅ 班表已載入，請輸入代號並轉換")
+
+    st.subheader("② 再輸入班表代號")
+    code = st.text_input("班表代號：", value=(st.session_state.last_code or ""))
+
+    st.subheader("③ 轉換並預覽")
+    convert_clicked = st.button("🚀 轉換 / 預覽")
+
+    if convert_clicked:
+        if not st.session_state.loaded_excel_bytes:
+            st.error("❌ 請先在步驟①按「載入班表」")
+        elif not code.strip():
+            st.error("❌ 請先輸入班表代號")
+        else:
+            st.session_state.last_code = code.strip()
+
+            df_rules_now = st.session_state.edited_rules
+            simplify_map_now = dict(zip(df_rules_now["原始關鍵字"], df_rules_now["簡化後"]))
+
+            df_output, csv_text, year_month = run_convert(
+                code=code.strip(),
+                source=st.session_state.last_source,
+                excel_bytes=st.session_state.loaded_excel_bytes,
+                drive_file_name=st.session_state.loaded_drive_file_name,
+                simplify_map=simplify_map_now
+            )
+
+            if df_output is not None:
+                st.session_state.df_output = df_output
+                st.session_state.csv_text = csv_text
+                st.session_state.year_month = year_month
+                status_box.info("✅ 已完成轉換：請先確認下方預覽，若需要可調整縮寫後重新轉換。")
+
+    if st.session_state.df_output is not None:
+        st.subheader("📋 內容預覽")
+        st.dataframe(st.session_state.df_output, use_container_width=True)
+
         st.markdown(
-            "<p style='color:red; font-size:18px; font-weight:bold;'>🗑️⚠ 注意！若留有空行程式可能發生錯誤，請將空行右側方框勾選後，右上角點選刪除。</p>",
+            "<p style='color:red; font-size:18px; font-weight:bold;'>⚠ CSV 檔案直接開啟內容可能為亂碼，但不影響匯入，請先確認上方資料無誤後再下載。</p>",
             unsafe_allow_html=True
         )
 
+        with st.expander("🔧 不滿意？在這裡調整縮寫後重新轉換", expanded=False):
+            st.markdown(
+                "<p style='color:red; font-size:18px; font-weight:bold;'>🗑️⚠ 注意！若留有空行程式可能發生錯誤，請將空行右側方框勾選後，右上角點選刪除。</p>",
+                unsafe_allow_html=True
+            )
 
-        edited = st.data_editor(
-            st.session_state.edited_rules,
-            use_container_width=True,
-            num_rows="dynamic",
-            key="rules_editor"
+            edited = st.data_editor(
+                st.session_state.edited_rules,
+                use_container_width=True,
+                num_rows="dynamic",
+                key="rules_editor"
+            )
+            st.session_state.edited_rules = edited
+            st.info("✏️ 修改縮寫後，請重新按上方「🚀 轉換 / 預覽」更新結果。")
+
+        st.download_button(
+            label=f"📥 下載 {st.session_state.year_month}個人班表({st.session_state.last_code}).csv",
+            data=st.session_state.csv_text,
+            file_name=f"{st.session_state.year_month}個人班表({st.session_state.last_code}).csv",
+            mime="text/csv"
         )
 
-        st.session_state.edited_rules = edited
 
-        st.info("✏️ 修改縮寫後，請重新按上方「🚀 轉換 / 預覽」更新結果。")
+# ============================================================
+# Tab 2：留言回饋（回饋型）
+# ============================================================
+with tab_feedback:
+    st.subheader("💬 留言回饋")
+    st.caption("這裡可留下問題回報、使用心得或功能建議。")
+
+    feedback_sheet_id = st.secrets.get("FEEDBACK_SHEET_ID", "").strip()
+
+    if not feedback_sheet_id:
+        st.warning("尚未設定 FEEDBACK_SHEET_ID，請先於 Streamlit Secrets 設定回饋試算表 ID。")
+    else:
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            show_count = st.selectbox("顯示筆數", [10, 20, 50], index=1)
+        with col2:
+            st.write("")
+            st.write("")
+            refresh = st.button("🔄 重新整理留言")
+
+        try:
+            df_fb = read_feedback_from_sheet(feedback_sheet_id)
+        except Exception as e:
+            st.error(f"❌ 讀取留言板失敗：{e}")
+            df_fb = pd.DataFrame(columns=["time", "name", "message", "source", "file_name", "code"])
+
+        if df_fb.empty:
+            st.info("目前還沒有留言，歡迎留下第一則意見。")
+        else:
+            st.markdown("#### 最新留言")
+            for _, row in df_fb.head(show_count).iterrows():
+                time_text = str(row.get("time", ""))
+                name_text = str(row.get("name", "匿名")) or "匿名"
+                msg_text = str(row.get("message", ""))
+                source_text = str(row.get("source", ""))
+                file_name_text = str(row.get("file_name", ""))
+                code_text = str(row.get("code", ""))
+
+                meta = " ｜ ".join([x for x in [source_text, file_name_text, code_text] if x])
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        border:1px solid #E5E7EB;
+                        border-radius:12px;
+                        padding:12px 14px;
+                        margin-bottom:10px;
+                        background-color:#FAFAFA;
+                    ">
+                        <div style="font-weight:700; margin-bottom:4px;">{name_text}</div>
+                        <div style="color:#6B7280; font-size:12px; margin-bottom:8px;">{time_text}</div>
+                        <div style="white-space:pre-wrap; margin-bottom:8px;">{msg_text}</div>
+                        <div style="color:#6B7280; font-size:12px;">{meta}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        st.markdown("---")
+        st.markdown("#### ✍️ 我要留言")
+
+        with st.form("feedback_form", clear_on_submit=True):
+            nickname = st.text_input("暱稱（可留空，留空則顯示匿名）")
+            message = st.text_area("留言內容", height=120, placeholder="例如：某個班別時間規則想調整、某個功能很好用、某個地方不懂等…")
+            submitted = st.form_submit_button("送出留言")
+
+        if submitted:
+            if not message.strip():
+                st.warning("請先輸入留言內容。")
+            else:
+                try:
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    source_text = st.session_state.get("last_source", "") or ""
+                    file_name_text = st.session_state.get("loaded_drive_file_name", "") or ""
+                    code_text = st.session_state.get("last_code", "") or ""
+
+                    append_feedback_to_sheet(
+                        feedback_sheet_id,
+                        [
+                            now,
+                            nickname.strip() or "匿名",
+                            message.strip(),
+                            source_text,
+                            file_name_text,
+                            code_text
+                        ]
+                    )
+                    st.success("✅ 已送出留言，謝謝你的回饋！")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 送出留言失敗：{e}")
 
 
-    st.download_button(
-        label=f"📥 下載 {st.session_state.year_month}個人班表({st.session_state.last_code}).csv",
-        data=st.session_state.csv_text,
-        file_name=f"{st.session_state.year_month}個人班表({st.session_state.last_code}).csv",
-        mime="text/csv"
-    )
+# ============================================================
+# Tab 3：更新日誌（純文字但較美觀）
+# ============================================================
+with tab_changelog:
+    st.subheader("📝 更新日誌")
+    st.caption("這裡記錄系統功能調整與版本更新。")
+
+    for item in CHANGELOG_ITEMS:
+        st.markdown(
+            f"""
+            <div style="
+                border-left:4px solid #3B82F6;
+                background-color:#F8FAFC;
+                padding:12px 14px;
+                margin-bottom:12px;
+                border-radius:8px;
+            ">
+                <div style="font-size:12px; color:#64748B; margin-bottom:4px;">
+                    {item["date"]} ｜ {item["version"]}
+                </div>
+                <div style="font-weight:700; margin-bottom:6px;">
+                    {item["title"]}
+                </div>
+                <div style="white-space:pre-wrap;">
+                    {item["content"]}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
