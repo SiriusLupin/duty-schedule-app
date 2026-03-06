@@ -656,6 +656,11 @@ with tab_main:
     elif source == "現有共用班表檔案(3個月內)":
         try:
             files = list_recent_drive_files(months_approx_days=92, page_size=100)
+        # 排除留言回饋試算表
+            feedback_sheet_id = st.secrets.get("FEEDBACK_SHEET_ID", "").strip()
+            if feedback_sheet_id:
+                files = [f for f in files if f["id"] != feedback_sheet_id]
+
         except Exception as e:
             st.error(f"❌ 無法列出 Google Drive 檔案：{e}")
             files = []
@@ -666,7 +671,7 @@ with tab_main:
             def pretty_label(f):
                 typ = "Google試算表" if f["mimeType"] == "application/vnd.google-apps.spreadsheet" else "Excel(.xlsx)"
                 mt = f.get("modifiedTime", "")
-                return f'{f["name"]} ｜ {typ} ｜ {mt}'
+                return f["name"]
 
             options = {pretty_label(f): f for f in files}
             labels = list(options.keys())
