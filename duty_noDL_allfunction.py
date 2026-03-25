@@ -527,12 +527,12 @@ def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str
         if "附　註" in content:
             continue
     # ✅ 排除代碼對照說明列，例如：(蔡)：蔡涵怡
-    if is_code_legend_text(content):
-        continue
+        if is_code_legend_text(content):
+            continue
 
-    for col_idx in range(1, len(date_mapping) + 1):
-        cell = df.iat[row_idx, col_idx]
-        cell_str = "" if pd.isna(cell) else str(cell).strip()
+        for col_idx in range(1, len(date_mapping) + 1):
+            cell = df.iat[row_idx, col_idx]
+            cell_str = "" if pd.isna(cell) else str(cell).strip()
 
         # ✅ 排除儲存格內的代碼說明文字
         if is_code_legend_text(cell_str):
