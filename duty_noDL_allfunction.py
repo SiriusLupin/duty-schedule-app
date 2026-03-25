@@ -388,6 +388,23 @@ def apply_time_rules(df, holiday_map, column_map):
         df = pd.concat([df, pd.DataFrame(extra_rows)], ignore_index=True)
 
     return df
+#定義說明文字以避免造成的班表代碼誤解讀
+def is_code_legend_text(text: str) -> bool:
+    """
+    判斷是否為代碼對照說明文字，例如：
+    (蔡)：蔡涵怡
+    （蔡）：蔡涵怡
+    (蔡):蔡涵怡
+    """
+    if not text:
+        return False
+
+    text = str(text).strip()
+
+    # 支援半形/全形括號、半形/全形冒號
+    pattern = r"^[\(（][^\)）]+[\)）]\s*[:：]"
+    return re.match(pattern, text) is not None
+
 
 # ============================================================
 # 5) 回饋留言板：Google Sheet 作為後端
@@ -509,24 +526,31 @@ def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str
             continue
         if "附　註" in content:
             continue
+    # ✅ 排除代碼對照說明列，例如：(蔡)：蔡涵怡
+    if is_code_legend_text(content):
+        continue
 
-        for col_idx in range(1, len(date_mapping) + 1):
-            cell = df.iat[row_idx, col_idx]
-            cell_str = "" if pd.isna(cell) else str(cell)
+    for col_idx in range(1, len(date_mapping) + 1):
+        cell = df.iat[row_idx, col_idx]
+        cell_str = "" if pd.isna(cell) else str(cell).strip()
 
-            if code in cell_str:
-                simplified = re.sub(r"\((\d{1,2}:\d{2})-(\d{1,2}:\d{2})\)", "", content)
+        # ✅ 排除儲存格內的代碼說明文字
+        if is_code_legend_text(cell_str):
+            continue
 
-                for k, v in simplify_map.items():
-                    if pd.notna(k) and pd.notna(v):
-                        simplified = simplified.replace(str(k), str(v))
+        if code in cell_str:
+            simplified = re.sub(r"\((\d{1,2}:\d{2})-(\d{1,2}:\d{2})\)", "", content)
 
-                results.append({
-                    "日期": date_mapping[col_idx - 1]["日期"],
-                    "星期": date_mapping[col_idx - 1]["星期"],
-                    "工作內容": content,
-                    "簡化後內容": simplified,
-                })
+            for k, v in simplify_map.items():
+                if pd.notna(k) and pd.notna(v):
+                    simplified = simplified.replace(str(k), str(v))
+
+            results.append({
+                "日期": date_mapping[col_idx - 1]["日期"],
+                "星期": date_mapping[col_idx - 1]["星期"],
+                "工作內容": content,
+                "簡化後內容": simplified,
+            })
 
     df_result = pd.DataFrame(results)
     if df_result.empty:
@@ -549,6 +573,12 @@ def run_convert(code: str, source: str, excel_bytes: bytes, drive_file_name: str
 # 7) 更新日誌：純文字但較美觀
 # ============================================================
 CHANGELOG_ITEMS = [
+     {
+        "date": "2026-03-25",
+        "version": "v3.4",
+        "title": "排除班表代碼說明文字",
+        "content": "修正程式會讀取到說明欄中的班表代碼對照文字，導致產出非預期之行事曆項目。"
+    },
     {
         "date": "2026-03-06",
         "version": "v3.3",
